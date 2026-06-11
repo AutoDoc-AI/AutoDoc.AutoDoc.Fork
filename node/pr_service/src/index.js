@@ -92,9 +92,15 @@ app.post('/publish', async (req, res) => {
         }
 
         // 5. Create or Update the file
-        const newContent = existingContent
-            ? `${existingContent}\n\n---\n\n${markdownContent}`
-            : markdownContent;
+        // Clean markdown content from potential ```markdown blocks if Gemini added them
+        let finalContent = markdownContent.trim();
+        if (finalContent.startsWith('```markdown')) {
+            finalContent = finalContent.substring(11).replace(/```$/, '').trim();
+        } else if (finalContent.startsWith('```')) {
+            finalContent = finalContent.substring(3).replace(/```$/, '').trim();
+        }
+
+        const newContent = finalContent;
 
         await octokit.rest.repos.createOrUpdateFileContents({
             owner: targetOwner,
@@ -115,7 +121,7 @@ app.post('/publish', async (req, res) => {
                 owner,
                 repo,
                 title: 'docs: AutoDoc AI Documentation Update',
-                head: needsFork ? `${targetOwner}:${targetBranch}` : targetBranch,
+                head: `${targetOwner}:${targetBranch}`,
                 base: upstreamDefaultBranch,
                 body: 'This is an automated pull request created by AutoDoc pipeline to update the documentation. Any further pushes will update this PR automatically.'
             });

@@ -42,15 +42,24 @@ class AIDocsService:
 
     def get_gemini_response(self, prompt):
         """Calls Gemini API to generate content based on the prompt."""
-        try:
-            response = self.client.models.generate_content(
-                model='gemini-3.5-flash',
-                contents=prompt
-            )
-            return response.text
-        except Exception as e:
-            print(f"Error calling Gemini API: {e}")
-            return f"Error: {str(e)}"
+        import time
+        max_retries = 3
+        delay = 5
+
+        for attempt in range(max_retries):
+            try:
+                response = self.client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt
+                )
+                return response.text
+            except Exception as e:
+                print(f" [!] Error calling Gemini API (Attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(delay)
+                    delay *= 2
+                else:
+                    raise e
 
     def send_to_api(self, payload):
         """Gelen veriyi belirtilen endpoint'e POST eder."""
@@ -71,6 +80,7 @@ class AIDocsService:
             data_dict = json.loads(message)
             repo_full_name = data_dict.get("repoFullName", "")
             changes = data_dict.get("changes", [])
+            existing_doc = data_dict.get("existingDoc", "")
             
             if not changes:
                 print(" [!] No changes found in message.")
@@ -84,7 +94,17 @@ class AIDocsService:
                 patch = change.get("patch", "")
                 diff_text += f"\n--- {filename} ---\n{patch}\n"
             
-            prompt = f"Aşağıdaki değişiklik (diff/patch) kayıtlarını incele ve projenin autodoc.md dokümantasyonunu bu değişikliklere göre nasıl güncellememiz gerektiğini Markdown formatında yaz:\n{diff_text}"
+            prompt = f"""Sen uzman bir teknik yazar ve yazılım geliştiricisin.
+Görevin, projenin mevcut dokümantasyonunu (autodoc.md) gelen kod değişikliklerine (diff/patch) göre güncellemektir.
+Lütfen sadece Markdown formatında güncellenmiş dosyanın TAM içeriğini döndür. 
+Başında, sonunda veya aralarında hiçbir açıklama, yorum, selamlaşma veya "Şunu değiştirdim" gibi metinler BULUNMAMALIDIR. Sadece ve sadece güncel Markdown içeriği olmalıdır.
+
+Mevcut Dokümantasyon:
+{existing_doc if existing_doc else "Henüz bir dokümantasyon oluşturulmamış."}
+
+Değişiklikler (Diffs):
+{diff_text}
+"""
 
             # Call Gemini API
             print(" [x] Processing with Gemini API...")

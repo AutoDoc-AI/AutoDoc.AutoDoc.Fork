@@ -77,10 +77,28 @@ app.post('/webhook', async (req, res) => {
             patch
         }));
 
+        // Fetch existing autodoc.md
+        let existingDoc = '';
+        try {
+            const docResponse = await octokit.rest.repos.getContent({
+                owner,
+                repo,
+                path: 'autodoc.md',
+            });
+            if (docResponse.data.type === 'file' && docResponse.data.content) {
+                existingDoc = Buffer.from(docResponse.data.content, 'base64').toString('utf8');
+            }
+        } catch (error) {
+            if (error.status !== 404) {
+                console.error('[Webhook Service] Error fetching existing autodoc.md:', error.message);
+            }
+        }
+
         const message = {
             repoUrl: payload.repository.html_url,
             repoFullName: repoFullName,
             changes: changesList,
+            existingDoc: existingDoc,
             timestamp: new Date().toISOString()
         };
 
